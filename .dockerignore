@@ -1,0 +1,17 @@
+# Ignore everything we don’t need inside the image
+.git
+.gitignore
+.dockerignore
+Dockerfile
+README.md
+LICENSE
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env/config
+.env
+.env.*
