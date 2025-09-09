@@ -6,13 +6,13 @@ GitHub repo: **[https://github.com/RomanHrynchukG/puppeteer-batch](https://githu
 
 ## What this service does (quick)
 
-* Accepts a **batch of URLs** (up to **100** per request). [**Important**]
+* Accepts a **batch of URLs** (up to **50** per request). [**Important**]
 * For each URL:
   1. Validates URL format
   2. Checks the domain with **APIVoid v2 /parked-domain**
   3. If safe/online → loads page with **Puppeteer** to extract **rendered text**
   4. If Puppeteer sees a bot wall/CAPTCHA/very short content → **retries via ScraperAPI**
-* Processes requests **concurrently** (max 5 at a time). [**Important**]
+* Processes requests **concurrently** (max 2 at a time). [**Important**]
 * Returns a per-URL **status** with standardized failure reasons and messages.
 
 ---
@@ -124,7 +124,7 @@ sudo docker run -d --restart=always \
 ```
 
 * Max 100 URLs per call (duplicates are de-duplicated)
-* Processed with **concurrency = 5**
+* Processed with **concurrency = 2**
 
 ### Example cURL
 
@@ -294,7 +294,7 @@ The top-level response includes a request id and array of results:
 
   (Some container runtimes/hosts require sandbox disabled.)
 * **Security**: If public-facing, add auth and rate limiting in front of this service.
-* **Performance**: Concurrency is 5 by default. Adjust `CONCURRENCY`, `PER_URL_TIMEOUT_MS`, and `MIN_TEXT_FOR_OK` in `server.js` as needed.
+* **Performance**: Concurrency is 2 by default. Adjust `CONCURRENCY`, `PER_URL_TIMEOUT_MS`, and `MIN_TEXT_FOR_OK` in `server.js` as needed.
 
 ---
 
