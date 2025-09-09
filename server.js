@@ -17,8 +17,8 @@ const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY || ""; // if missing => fail w
 const PUPPETEER_EXECUTABLE_PATH =
   process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
 
-const MAX_URLS_PER_REQUEST = 100;
-const CONCURRENCY = 3;
+const MAX_URLS_PER_REQUEST = 50;
+const CONCURRENCY = 2;
 const PER_URL_TIMEOUT_MS = 60_000;
 const TEXT_MAX_CHARS = 200_000;
 const MIN_TEXT_FOR_OK = 300; // treat <300 chars as likely bot wall / failure
