@@ -250,6 +250,11 @@ async function getBrowser() {
 async function withPage(fn) {
   const browser = await getBrowser();
   const page = await browser.newPage();
+  
+  // give a little more breathing room on timeouts
+  page.setDefaultNavigationTimeout(35_000);
+  page.setDefaultTimeout(35_000);
+  
   await page.setRequestInterception(true);
   page.on("request", (req) => {
     const t = req.resourceType();
@@ -262,19 +267,62 @@ async function withPage(fn) {
     await page.close();
   }
 }
+
+// robust extractor that tolerates mid-flight navigations
+async function getTitleAndTextWithRetries(page, { attempts = 2, settleWaitMs = 500 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      // Try reading title + body text
+      const title = await page.title();
+      const text = await page.evaluate(() => document.body?.innerText?.trim() || "");
+      return { title, text };
+    } catch (e) {
+      const msg = String(e?.message || e);
+      // Known transient errors when the frame reloads while evaluating
+      const transient =
+        /Execution context was destroyed|Cannot find context with specified id/i.test(msg);
+
+      if (!transient) throw e; // real error — bubble up immediately
+      lastErr = e;
+
+      // Wait for things to settle, then give it another shot
+      try {
+        // If another nav is in progress, wait for the network to idle
+        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 10_000 }).catch(() => {});
+      } catch { /* ignore */ }
+      await delay(settleWaitMs);
+    }
+  }
+  throw lastErr || new Error("execution_context_retries_exhausted");
+}
+
 async function puppeteerFetch(url) {
   return withPage(async (page) => {
-    const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    // CHANGED: wait for both DOMContentLoaded and a brief network idle
+    const resp = await page.goto(url, {
+      waitUntil: ["domcontentloaded", "networkidle2"],
+      timeout: 30_000,
+    });
+
     const httpStatus = resp?.status() ?? null;
 
-    // explicit offline/404 signals
+    // explicit offline/4xx/5xx signals on initial nav
     if (!httpStatus || httpStatus >= 400) {
       const title = await page.title().catch(() => "");
-      return { ok: false, reason: "offline_on_puppeteer", text: `HTTP ${httpStatus ?? "no_response"}`, httpStatus, title, content: "" };
+      return {
+        ok: false,
+        reason: "offline_on_puppeteer",
+        text: `HTTP ${httpStatus ?? "no_response"}`,
+        httpStatus,
+        title,
+        content: "",
+      };
     }
 
-    const title = await page.title();
-    const text = await page.evaluate(() => document.body?.innerText?.trim() || "");
+    // CHANGED: robust text extraction with transient-navigation retries
+    const { title, text } = await getTitleAndTextWithRetries(page, { attempts: 2, settleWaitMs: 600 });
+
     return { ok: true, httpStatus, title, content: text.slice(0, TEXT_MAX_CHARS) };
   });
 }
