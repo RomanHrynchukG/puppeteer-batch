@@ -376,6 +376,49 @@ async function processOne(inputUrl, reqId) {
   }
 
   if (!pptr.ok) {
+    // --- NEW: treat common bot-wall statuses as CAPTCHA and retry via ScraperAPI
+    const botWallCodes = new Set([401, 403, 407, 429, 503]);
+    if (pptr.httpStatus && botWallCodes.has(pptr.httpStatus)) {
+      log(`[${reqId}] Puppeteer HTTP ${pptr.httpStatus} → ScraperAPI retry: ${url}`);
+      const viaProxy = await hardCap(scraperApiFetch(url));
+  
+      if (!viaProxy.ok) {
+        return {
+          status: "failure",
+          url_input: inputUrl,
+          failure_reason: viaProxy.reason || "scraperapi",
+          failure_text: viaProxy.text || `ScraperAPI failed after HTTP ${pptr.httpStatus} on Puppeteer.`,
+          scraped_text: "",
+          ms: Date.now() - start,
+        };
+      }
+  
+      // If ScraperAPI succeeds, still guard against CAPTCHA/short content
+      const proxyLooksBad =
+        looksLikeCaptcha(viaProxy.content, viaProxy.title);
+  
+      if (proxyLooksBad) {
+        return {
+          status: "failure",
+          url_input: inputUrl,
+          failure_reason: "scraperapi",
+          failure_text: "ScraperAPI returned CAPTCHA/short content.",
+          scraped_text: "",
+          ms: Date.now() - start,
+        };
+      }
+  
+      return {
+        status: "success",
+        url_input: inputUrl,
+        failure_reason: "",
+        failure_text: "",
+        scraped_text: viaProxy.content,
+        ms: Date.now() - start,
+      };
+    }
+  
+    // Non-bot-wall failures: keep original behavior
     return {
       status: "failure",
       url_input: inputUrl,
@@ -385,6 +428,7 @@ async function processOne(inputUrl, reqId) {
       ms: Date.now() - start,
     };
   }
+  
 
   // 4) CAPTCHA / short content decision
   const isCaptchaOrShort =
